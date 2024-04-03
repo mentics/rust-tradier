@@ -1,2 +1,2 @@
 # rust-tradier
-A client for the Tradier API in Rust.
+A client for the [Tradier API](https://documentation.tradier.com/) in Rust.
