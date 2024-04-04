@@ -1,10 +1,5 @@
 # rust-tradier
-A client for the [Tradier API](https://documentation.tradier.com/) in Rust.
-
-
-# Functionality goals
-
-Eventually, it should be a complete implementation to make it trivial to interact with the full Tradier API.
+Someday it may become a general client for the [Tradier API](https://documentation.tradier.com/) in Rust, but for now, it's just the functionality I need for a project.
 
 # Design goals
 
