@@ -1,3 +1,4 @@
+use chrono::{NaiveDateTime, Utc};
 use std::env;
 use futures_util::{StreamExt, SinkExt};
 use serde_json::{Value,json};
@@ -5,7 +6,7 @@ use tokio::runtime::Builder;
 use tokio_tungstenite::{connect_async, tungstenite::protocol::Message, WebSocketStream};
 
 pub trait Handler<T> {
-    fn on_data(&mut self, data:T);
+    fn on_data(&mut self, timestamp:NaiveDateTime, data:T);
 }
 
 pub fn start<H:Handler<String> + 'static + Send + Sync>(handler:H) {
@@ -28,7 +29,7 @@ async fn run<H:Handler<String> + 'static + Send + Sync>(mut handler:H) {
     let payload = json!({ "symbols": ["SPY"], "sessionid": sid, "linebreak": false }).to_string();
     println!("Payload sending: {}", payload);
     match write.send(Message::Text(payload)).await {
-        Ok(o) => println!("Error when submitting subscription: {:?}", o),
+        Ok(o) => println!("Successful subscription: {:?}", o),
         Err(err) => {
             println!("Error when submitting subscription: {:?}", err);
             return;
@@ -36,31 +37,32 @@ async fn run<H:Handler<String> + 'static + Send + Sync>(mut handler:H) {
     }
     loop {
         if let Some(msg) = read.next().await {
-            println!("Received message: {:?}", msg);
+            let now = Utc::now().naive_utc();
+            // println!("Received message: {:?}", msg);
             match msg {
                 Ok(Message::Text(text)) => {
-                    println!("Received text: {:?}", text);
-                    handler.on_data(text);
+                    // println!("Received text: {:?}", text);
+                    handler.on_data(now, text);
                 }
                 Ok(Message::Binary(bin)) => {
                     println!("Received binary: {:?}", bin);
                 }
                 Ok(Message::Ping(bin)) => {
-                    println!("Received ping: {:?}", bin);
+                    println!("Received ping at {:?}: {:?}", now, bin);
                 }
                 Ok(Message::Pong(bin)) => {
-                    println!("Received pong: {:?}", bin);
+                    println!("Received pong at {:?}: {:?}", now, bin);
                 }
                 Ok(Message::Close(msg)) => {
-                    println!("Received close: {:?}", msg);
+                    println!("Received close at {:?}: {:?}", now, msg);
                     break;
                 }
                 Err(e) => {
-                    println!("Error: {:?}", e);
+                    println!("Error at {:?}: {:?}", now, e);
                     break;
                 },
                 _ => {
-                    println!("Other: {:?}", msg);
+                    println!("Other at {:?}: {:?}", now, msg);
                     break;
                 }
             }
@@ -91,6 +93,7 @@ async fn connect() -> (String, WebSocketStream<tokio_tungstenite::MaybeTlsStream
 use reqwest::Client;
 
 async fn tradier_post(uri: &str) -> Result<String, reqwest::Error> {
+    // TODO: show error message if key missing
     let api_key = env::var("TRADIER_API_KEY").unwrap();
     const BASE_URL: &str = "https://api.tradier.com/v1";
     let url = [BASE_URL, uri].concat();
@@ -115,17 +118,28 @@ async fn tradier_post(uri: &str) -> Result<String, reqwest::Error> {
     // }
 }
 
+
 #[cfg(test)]
 mod tests {
     use super::*;
+    use std::arch::asm;
 
     struct Test {
         data:String
     }
 
     impl Handler<String> for Test {
-        fn on_data(&mut self, data:String) {
-            println!("Handler::on_data called with {:?}", data);
+        fn on_data(&mut self, timestamp:NaiveDateTime, data:String) {
+            // let ago1 = timestamp.elapsed();
+            // let ago2 = timestamp.elapsed();
+            // let t1 = core::arch::x86::_rdtsc();
+            // let t2 = core::arch::x86::_rdtsc();
+            // unsafe {
+            //     let t1 = core::arch::x86_64::_rdtsc();
+            //     let t2 = core::arch::x86_64::_rdtsc();
+            //     println!("{}", t2 - t1);
+            // }
+            // println!("Handler::on_data called, msg received {:?} ago, 2: {:?}, with {:?}", ago1, ago2, data);
             self.data = data;
         }
     }
@@ -136,5 +150,80 @@ mod tests {
         start(h);
         std::thread::sleep(std::time::Duration::from_secs(4));
         println!("Test ending");
+    }
+
+    #[test]
+    fn test_timing() {
+        unsafe {
+            let t1 = core::arch::x86_64::_rdtsc();
+            let t2 = core::arch::x86_64::_rdtsc();
+            println!("Without asm elapsed {}", t2 - t1);
+        }
+    }
+
+    #[test]
+    fn test_timing_asm_separate() {
+        unsafe {
+            let mut t1low: u32 = 0;
+            let mut t1high: u32 = 0;
+            let mut t2low: u32 = 0;
+            let mut t2high: u32 = 0;
+            let mut t3low: u32 = 0;
+            let mut t3high: u32 = 0;
+
+            asm!(
+                "rdtsc",
+                out("eax") t1low,
+                out("edx") t1high,
+                options(nostack, pure, nomem)
+            );
+
+            asm!(
+                "rdtsc",
+                out("eax") t2low,
+                out("edx") t2high,
+                options(nostack, pure, nomem)
+            );
+
+            asm!(
+                "rdtsc",
+                out("eax") t3low,
+                out("edx") t3high,
+                options(nostack, pure, nomem)
+            );
+
+            let t1 = (t1high as u64) << 32 | t1low as u64;
+            let t2 = (t2high as u64) << 32 | t2low as u64;
+            let t3 = (t3high as u64) << 32 | t3low as u64;
+            println!("Asm separate elapsed 1-2: {}, elapsed 2-3: {}, elapsed 1-3: {},", (t2 - t1), (t3 - t2), (t3 - t1));
+        }
+    }
+
+    #[test]
+    fn test_timing_asm_combined() {
+        unsafe {
+            let mut t1low: u32;
+            let mut t1high: u32;
+            let mut t2low: u32;
+            let mut t2high: u32;
+
+            asm!(
+                "rdtsc",
+                "mov r8d, eax",
+                "mov r9d, edx",
+                "rdtsc",
+                out("r8d") t1low,
+                out("r9d") t1high,
+                out("eax") t2low,
+                out("edx") t2high,
+                options(nostack, pure, nomem)
+            );
+
+            let t1 = (t1high as u64) << 32 | t1low as u64;
+            let t2 = (t2high as u64) << 32 | t2low as u64;
+            println!("Asm combined elapsed {}", t2 - t1);
+
+            println!("time: {}", Utc::now().naive_utc());
+        }
     }
 }
