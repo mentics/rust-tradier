@@ -20,6 +20,15 @@ pub fn start<H:Handler<String> + 'static + Send + Sync>(handler:H) {
     });
 }
 
+pub fn run_sync<H:Handler<String> + 'static + Send + Sync>(handler:H) {
+    println!("Setting up separate thread for websocket client");
+    let rt = Builder::new_current_thread().enable_io().enable_time().build().unwrap(); // new_multi_thread().worker_threads(4).enable_all().build().unwrap();
+    // tokio::runtime::Runtime::new().unwrap();
+    rt.block_on(async move {
+        run(handler).await;
+    });
+}
+
 async fn run<H:Handler<String> + 'static + Send + Sync>(mut handler:H) {
     println!("In websocket thread");
     // TODO: if stream breaks, try to fix it
@@ -80,6 +89,7 @@ async fn connect() -> (String, WebSocketStream<tokio_tungstenite::MaybeTlsStream
     let s = &data["stream"];
     let sid = s["sessionid"].as_str().unwrap().to_string();
     // let url = s["url"].as_str().unwrap();
+    // See: https://documentation.tradier.com/brokerage-api/streaming/get-markets-events
     let url = "wss://ws.tradier.com/v1/markets/events";
     let url_parsed = reqwest::Url::parse(url).unwrap();
     println!("Connecting to websocket {} with session id {}", url, sid);
@@ -149,7 +159,26 @@ mod tests {
         let h = Test { data: "none yet".to_string() };
         start(h);
         std::thread::sleep(std::time::Duration::from_secs(4));
-        println!("Test ending");
+        println!("Test websocket ending");
+    }
+
+    #[test]
+    fn test_run_sync() {
+        // let h = Test { data: "none yet".to_string() };
+        // run_sync(h);
+        struct HH(u16);
+        impl Handler<String> for HH {
+            fn on_data(&mut self, timestamp:NaiveDateTime, data:String) {
+                println!("Handler::on_data called, msg received {:?}", data);
+                self.0 += 1;
+                if self.0 > 2 {
+                    println!("Test run_sync ending");
+                    std::process::exit(0);
+                }
+            }
+        }
+        run_sync(HH(0));
+        println!("Test run_sync ending");
     }
 
     #[test]
