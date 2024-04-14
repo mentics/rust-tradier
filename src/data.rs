@@ -20,13 +20,22 @@ pub fn start<H:Handler<String> + 'static + Send + Sync>(handler:H) {
     });
 }
 
-pub fn run_sync<H:Handler<String> + 'static + Send + Sync>(handler:H) {
-    println!("Setting up separate thread for websocket client");
-    let rt = Builder::new_current_thread().enable_io().enable_time().build().unwrap(); // new_multi_thread().worker_threads(4).enable_all().build().unwrap();
+// pub fn run_sync<H:Handler<String> + 'static + Send + Sync>(handler:H) {
+//     println!("Setting up runtime for websocket client");
+//     let rt = Builder::new_current_thread().enable_io().enable_time().build().unwrap(); // new_multi_thread().worker_threads(4).enable_all().build().unwrap();
+//     // tokio::runtime::Runtime::new().unwrap();
+//     rt.block_on(async move {
+//         run(handler).await;
+//     });
+// }
+
+pub async fn run_async<H:Handler<String> + 'static + Send + Sync>(handler:H) {
+    println!("Setting up listening on websocket client");
+    // let rt = Builder::new_current_thread().enable_io().enable_time().build().unwrap(); // new_multi_thread().worker_threads(4).enable_all().build().unwrap();
     // tokio::runtime::Runtime::new().unwrap();
-    rt.block_on(async move {
+    // rt.block_on(async move {
         run(handler).await;
-    });
+    // });
 }
 
 async fn run<H:Handler<String> + 'static + Send + Sync>(mut handler:H) {
@@ -162,8 +171,8 @@ mod tests {
         println!("Test websocket ending");
     }
 
-    #[test]
-    fn test_run_sync() {
+    #[tokio::test]
+    async fn test_run_async() {
         // let h = Test { data: "none yet".to_string() };
         // run_sync(h);
         struct HH(u16);
@@ -177,8 +186,9 @@ mod tests {
                 }
             }
         }
-        run_sync(HH(0));
-        println!("Test run_sync ending");
+        run_async(HH(0)).await;
+        std::thread::sleep(std::time::Duration::from_secs(4));
+        println!("Test run_async ending");
     }
 
     #[test]
