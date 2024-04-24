@@ -9,13 +9,14 @@ pub trait Handler<T> {
     fn on_data(&mut self, timestamp:NaiveDateTime, data:T);
 }
 
-pub fn start<H:Handler<String> + 'static + Send + Sync>(handler:H) {
+pub fn start<H:Handler<String> + 'static + Send + Sync>(handler:H, symbol:&str) {
+    let sym = symbol.to_string();
     std::thread::spawn(move || {
         println!("Setting up separate thread for websocket client");
         let rt = Builder::new_current_thread().enable_io().enable_time().build().unwrap(); // new_multi_thread().worker_threads(4).enable_all().build().unwrap();
         // tokio::runtime::Runtime::new().unwrap();
         rt.block_on(async move {
-            run(handler).await;
+            run(handler, &sym).await;
         });
     });
 }
@@ -29,22 +30,21 @@ pub fn start<H:Handler<String> + 'static + Send + Sync>(handler:H) {
 //     });
 // }
 
-pub async fn run_async<H:Handler<String> + 'static + Send + Sync>(handler:H) {
+pub async fn run_async<H:Handler<String> + 'static + Send + Sync>(handler:H, symbol:&str) {
     println!("Setting up listening on websocket client");
     // let rt = Builder::new_current_thread().enable_io().enable_time().build().unwrap(); // new_multi_thread().worker_threads(4).enable_all().build().unwrap();
     // tokio::runtime::Runtime::new().unwrap();
     // rt.block_on(async move {
-        run(handler).await;
+        run(handler, symbol).await
     // });
 }
 
-async fn run<H:Handler<String> + 'static + Send + Sync>(mut handler:H) {
+async fn run<H:Handler<String> + 'static + Send + Sync>(mut handler:H, symbol:&str) {
     println!("In websocket thread");
     // TODO: if stream breaks, try to fix it
     let (sid, ws_stream) = connect().await;
     let (mut write, mut read) = ws_stream.split();
-    // let payload = format!("{{\"symbols\": [\"SPY\"], \"sessionid\": {sid}, \"linebreak\": false}}");
-    let payload = json!({ "symbols": ["SPY"], "sessionid": sid, "linebreak": false }).to_string();
+    let payload = json!({ "symbols": [symbol], "sessionid": sid, "linebreak": false }).to_string();
     println!("Payload sending: {}", payload);
     match write.send(Message::Text(payload)).await {
         Ok(o) => println!("Successful subscription: {:?}", o),
@@ -166,7 +166,7 @@ mod tests {
     #[test]
     fn test_websocket() {
         let h = Test { data: "none yet".to_string() };
-        start(h);
+        start(h, "SPY");
         std::thread::sleep(std::time::Duration::from_secs(4));
         println!("Test websocket ending");
     }
@@ -186,7 +186,7 @@ mod tests {
                 }
             }
         }
-        run_async(HH(0)).await;
+        run_async(HH(0), "SPY").await;
         std::thread::sleep(std::time::Duration::from_secs(4));
         println!("Test run_async ending");
     }
