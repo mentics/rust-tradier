@@ -113,7 +113,7 @@ use reqwest::Client;
 
 async fn tradier_post(uri: &str) -> Result<String, reqwest::Error> {
     // TODO: show error message if key missing
-    let api_key = env::var("TRADIER_API_KEY").unwrap();
+    let api_key = env::var("TRADIER_API_KEY").expect("Required TRADIER_API_KEY environment variable was not found");
     const BASE_URL: &str = "https://api.tradier.com/v1";
     let url = [BASE_URL, uri].concat();
 
