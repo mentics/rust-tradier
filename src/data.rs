@@ -1,22 +1,22 @@
 use chrono::{NaiveDateTime, Utc};
-use std::env;
+use std::{env, time::Duration};
 use futures_util::{StreamExt, SinkExt};
 use serde_json::{Value,json};
-use tokio::runtime::Builder;
+use tokio::{runtime::Builder, time::timeout};
 use tokio_tungstenite::{connect_async, tungstenite::protocol::Message, WebSocketStream};
 
 pub trait Handler<T> {
     fn on_data(&mut self, timestamp:NaiveDateTime, data:T);
 }
 
-pub fn start<H:Handler<String> + 'static + Send + Sync>(handler:H, symbol:&str) {
+pub fn start<H:Handler<String> + 'static + Send + Sync>(mut handler:H, symbol:&str) {
     let sym = symbol.to_string();
     std::thread::spawn(move || {
         println!("Setting up separate thread for websocket client");
         let rt = Builder::new_current_thread().enable_io().enable_time().build().unwrap(); // new_multi_thread().worker_threads(4).enable_all().build().unwrap();
         // tokio::runtime::Runtime::new().unwrap();
         rt.block_on(async move {
-            run(handler, &sym).await;
+            while run(&mut handler, &sym).await {}
         });
     });
 }
@@ -30,65 +30,84 @@ pub fn start<H:Handler<String> + 'static + Send + Sync>(handler:H, symbol:&str) 
 //     });
 // }
 
-pub async fn run_async<H:Handler<String> + 'static + Send + Sync>(handler:H, symbol:&str) {
+/// symbols is comma separated string of symbols to subscribe
+pub async fn run_async<H:Handler<String> + 'static + Send + Sync>(mut handler:H, symbols:&str) {
     println!("Setting up listening on websocket client");
     // let rt = Builder::new_current_thread().enable_io().enable_time().build().unwrap(); // new_multi_thread().worker_threads(4).enable_all().build().unwrap();
     // tokio::runtime::Runtime::new().unwrap();
     // rt.block_on(async move {
-        run(handler, symbol).await
+    while run(&mut handler, symbols).await {}
     // });
 }
 
-async fn run<H:Handler<String> + 'static + Send + Sync>(mut handler:H, symbol:&str) {
+/// Returns true if the caller should attempt to reconnect, or false if the caller should exit.
+async fn run<H:Handler<String> + 'static + Send + Sync>(handler:&mut H, symbols:&str) -> bool {
     println!("In websocket thread");
     // TODO: if stream breaks, try to fix it
     let (sid, ws_stream) = connect().await;
     let (mut write, mut read) = ws_stream.split();
-    let payload = json!({ "symbols": [symbol], "sessionid": sid, "linebreak": false }).to_string();
+    let payload = json!({ "symbols": [symbols], "sessionid": sid, "linebreak": false }).to_string();
     println!("Payload sending: {}", payload);
     match write.send(Message::Text(payload)).await {
         Ok(o) => println!("Successful subscription: {:?}", o),
         Err(err) => {
             println!("Error when submitting subscription: {:?}", err);
-            return;
+            return false;
         },
     }
     loop {
-        if let Some(msg) = read.next().await {
-            let now = Utc::now().naive_utc();
-            // println!("Received message: {:?}", msg);
-            match msg {
-                Ok(Message::Text(text)) => {
-                    // println!("Received text: {:?}", text);
-                    handler.on_data(now, text);
+        match timeout(Duration::from_secs(100), read.next()).await {
+            Err(elapsed) => {
+                println!("{}: Websocket read timed out |{}|. Sending ping.", Utc::now().naive_utc(), elapsed);
+                match write.send(Message::Ping(Vec::new())).await {
+                    Ok(_) => continue,
+                    Err(e) => {
+                        println!("Exiting: Error sending ping after timeout. {}", e);
+                        return false;
+                    }
                 }
-                Ok(Message::Binary(bin)) => {
-                    println!("Received binary: {:?}", bin);
-                }
-                Ok(Message::Ping(bin)) => {
-                    println!("Received ping at {:?}: {:?}", now, bin);
-                }
-                Ok(Message::Pong(bin)) => {
-                    println!("Received pong at {:?}: {:?}", now, bin);
-                }
-                Ok(Message::Close(msg)) => {
-                    println!("Received close at {:?}: {:?}", now, msg);
-                    break;
-                }
-                Err(e) => {
-                    println!("Error at {:?}: {:?}", now, e);
-                    break;
-                },
-                _ => {
-                    println!("Other at {:?}: {:?}", now, msg);
-                    break;
+            },
+
+            Ok(None) => {
+                println!("Exiting: Websocket read.next returned None.");
+                return false;
+            },
+
+            Ok(Some(msg)) => {
+                // if let Some(msg) = timeout(Duration::from_secs(100), read.next()).await {
+                let now = Utc::now().naive_utc();
+                // println!("Received message: {:?}", msg);
+                match msg {
+                    Ok(Message::Text(payload)) => {
+                        // println!("Received text: {:?}", text);
+                        handler.on_data(now, payload);
+                    }
+                    Ok(Message::Binary(payload)) => {
+                        println!("{}: Received binary: {:?}", now, payload);
+                    }
+                    Ok(Message::Ping(payload)) => {
+                        println!("{}: Received ping: {:?}", now, payload);
+                    }
+                    Ok(Message::Pong(payload)) => {
+                        println!("{}: Received pong: {:?}", now, payload);
+                    }
+                    Ok(Message::Close(payload)) => {
+                        println!("{}: Exiting: Received close: {:?}", now, payload);
+                        return false;
+                    }
+                    Err(e) => {
+                        println!("Error at {:?}: {:?}", now, e);
+                        break;
+                    },
+                    _ => {
+                        println!("Other at {:?}: {:?}", now, msg);
+                        break;
+                    }
                 }
             }
-        } else {
-            println!("Error in websocket thread");
-            break;
         }
     }
+    true
 }
 
 async fn connect() -> (String, WebSocketStream<tokio_tungstenite::MaybeTlsStream<tokio::net::TcpStream>>) {
@@ -105,7 +124,7 @@ async fn connect() -> (String, WebSocketStream<tokio_tungstenite::MaybeTlsStream
 
     let (ws_stream, _) = connect_async(url_parsed).await.expect("Failed to connect");
     println!("WebSocket handshake has been successfully completed");
-    return (sid, ws_stream);
+    (sid, ws_stream)
 }
 
 
@@ -119,7 +138,7 @@ async fn tradier_post(uri: &str) -> Result<String, reqwest::Error> {
 
     let client = Client::new();
 
-    return client
+    client
         .post(url)
         .header("Authorization", format!("Bearer {}", api_key))
         // .header("Content-Type", "application/json")
@@ -129,7 +148,7 @@ async fn tradier_post(uri: &str) -> Result<String, reqwest::Error> {
         .send()
         .await?
         .text()
-        .await;
+        .await
 
     // match response {
     //     Ok(res) => Ok(res),
