@@ -9,17 +9,17 @@ pub trait Handler<T> {
     fn on_data(&mut self, timestamp:NaiveDateTime, data:T);
 }
 
-pub fn start<H:Handler<String> + 'static + Send + Sync>(mut handler:H, symbol:&str) {
-    let sym = symbol.to_string();
-    std::thread::spawn(move || {
-        println!("Setting up separate thread for websocket client");
-        let rt = Builder::new_current_thread().enable_io().enable_time().build().unwrap(); // new_multi_thread().worker_threads(4).enable_all().build().unwrap();
-        // tokio::runtime::Runtime::new().unwrap();
-        rt.block_on(async move {
-            while run(&mut handler, &sym).await {}
-        });
-    });
-}
+// pub fn start<H:Handler<String> + 'static + Send + Sync>(mut handler:H, symbols:&str) {
+//     let sym = symbol.to_string();
+//     std::thread::spawn(move || {
+//         println!("Setting up separate thread for websocket client");
+//         let rt = Builder::new_current_thread().enable_io().enable_time().build().unwrap(); // new_multi_thread().worker_threads(4).enable_all().build().unwrap();
+//         // tokio::runtime::Runtime::new().unwrap();
+//         rt.block_on(async move {
+//             while run(&mut handler, &sym).await {}
+//         });
+//     });
+// }
 
 // pub fn run_sync<H:Handler<String> + 'static + Send + Sync>(handler:H) {
 //     println!("Setting up runtime for websocket client");
@@ -31,7 +31,7 @@ pub fn start<H:Handler<String> + 'static + Send + Sync>(mut handler:H, symbol:&s
 // }
 
 /// symbols is comma separated string of symbols to subscribe
-pub async fn run_async<H:Handler<String> + 'static + Send + Sync>(mut handler:H, symbols:&str) {
+pub async fn run_async<H:Handler<String> + 'static + Send + Sync>(mut handler:H, symbols:&[&str]) {
     println!("Setting up listening on websocket client");
     // let rt = Builder::new_current_thread().enable_io().enable_time().build().unwrap(); // new_multi_thread().worker_threads(4).enable_all().build().unwrap();
     // tokio::runtime::Runtime::new().unwrap();
@@ -41,12 +41,13 @@ pub async fn run_async<H:Handler<String> + 'static + Send + Sync>(mut handler:H,
 }
 
 /// Returns true if the caller should attempt to reconnect, or false if the caller should exit.
-async fn run<H:Handler<String> + 'static + Send + Sync>(handler:&mut H, symbols:&str) -> bool {
+async fn run<H:Handler<String> + 'static + Send + Sync>(handler:&mut H, symbols:&[&str]) -> bool {
     println!("In websocket thread");
     // TODO: if stream breaks, try to fix it
     let (sid, ws_stream) = connect().await;
     let (mut write, mut read) = ws_stream.split();
-    let payload = json!({ "symbols": [symbols], "sessionid": sid, "linebreak": false }).to_string();
+    // let symbols_str = symbols.join(",");
+    let payload = json!({ "symbols": symbols, "sessionid": sid, "linebreak": false }).to_string();
     println!("Payload sending: {}", payload);
     match write.send(Message::Text(payload)).await {
         Ok(o) => println!("Successful subscription: {:?}", o),
