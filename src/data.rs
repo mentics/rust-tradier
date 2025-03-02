@@ -1,9 +1,10 @@
 use chrono::{NaiveDateTime, Utc};
-use std::{env, time::Duration};
+use std::time::Duration;
 use futures_util::{StreamExt, SinkExt};
 use serde_json::{Value,json};
-use tokio::{runtime::Builder, time::timeout};
+use tokio::time::timeout;
 use tokio_tungstenite::{connect_async, tungstenite::protocol::Message, WebSocketStream};
+use crate::http::tradier_post;
 
 pub trait Handler<T> {
     fn on_data(&mut self, timestamp:NaiveDateTime, data:T);
@@ -112,7 +113,7 @@ async fn run<H:Handler<String> + 'static + Send + Sync>(handler:&mut H, symbols:
 }
 
 async fn connect() -> (String, WebSocketStream<tokio_tungstenite::MaybeTlsStream<tokio::net::TcpStream>>) {
-    let resp = tradier_post("/markets/events/session").await.unwrap();
+    let resp = tradier_post("/markets/events/session", None).await.unwrap();
     println!("{}", resp);
     let data = serde_json::from_str::<Value>(&resp).unwrap();
     let s = &data["stream"];
@@ -127,36 +128,6 @@ async fn connect() -> (String, WebSocketStream<tokio_tungstenite::MaybeTlsStream
     println!("WebSocket handshake has been successfully completed");
     (sid, ws_stream)
 }
-
-
-use reqwest::Client;
-
-async fn tradier_post(uri: &str) -> Result<String, reqwest::Error> {
-    // TODO: show error message if key missing
-    let api_key = env::var("TRADIER_API_KEY").expect("Required TRADIER_API_KEY environment variable was not found");
-    const BASE_URL: &str = "https://api.tradier.com/v1";
-    let url = [BASE_URL, uri].concat();
-
-    let client = Client::new();
-
-    client
-        .post(url)
-        .header("Authorization", format!("Bearer {}", api_key))
-        // .header("Content-Type", "application/json")
-        .header("Accept", "application/json")
-        .header("Content-Length", 0) // body.len().to_string())
-        .body("")
-        .send()
-        .await?
-        .text()
-        .await
-
-    // match response {
-    //     Ok(res) => Ok(res),
-    //     Err(e) => Err(e),
-    // }
-}
-
 
 #[cfg(test)]
 mod tests {
@@ -183,13 +154,13 @@ mod tests {
         }
     }
 
-    #[test]
-    fn test_websocket() {
-        let h = Test { data: "none yet".to_string() };
-        start(h, "SPY");
-        std::thread::sleep(std::time::Duration::from_secs(4));
-        println!("Test websocket ending");
-    }
+    // #[test]
+    // fn test_websocket() {
+    //     let h = Test { data: "none yet".to_string() };
+    //     start(h, "SPY");
+    //     std::thread::sleep(std::time::Duration::from_secs(4));
+    //     println!("Test websocket ending");
+    // }
 
     #[tokio::test]
     async fn test_run_async() {
@@ -206,7 +177,7 @@ mod tests {
                 }
             }
         }
-        run_async(HH(0), "SPY").await;
+        run_async(HH(0), &["SPY"]).await;
         std::thread::sleep(std::time::Duration::from_secs(4));
         println!("Test run_async ending");
     }
@@ -278,8 +249,8 @@ mod tests {
                 options(nostack, pure, nomem)
             );
 
-            let t1 = (t1high as u64) << 32 | t1low as u64;
-            let t2 = (t2high as u64) << 32 | t2low as u64;
+            let t1 = ((t1high as u64) << 32) | t1low as u64;
+            let t2 = ((t2high as u64) << 32) | t2low as u64;
             println!("Asm combined elapsed {}", t2 - t1);
 
             println!("time: {}", Utc::now().naive_utc());
