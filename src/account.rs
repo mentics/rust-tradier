@@ -1,50 +1,53 @@
-use serde::{Deserialize, Serialize};
-use chrono::{DateTime, Utc};
+use crate::custom_datetime;
 use crate::error::TradierError;
+use chrono::{DateTime, Utc};
 use serde::de::{self, Deserializer};
+use serde::{Deserialize, Serialize};
+use serde_json::{from_value, Value};
 
 fn deserialize_orders<'de, D>(deserializer: D) -> Result<Option<Orders>, D::Error>
 where
     D: Deserializer<'de>,
 {
-    let s: String = String::deserialize(deserializer)?;
-    if s == "null" {
-        Ok(None)
-    } else {
-        let orders: Orders = serde_json::from_str(&s).map_err(de::Error::custom)?;
-        Ok(Some(orders))
+    let value: Value = Deserialize::deserialize(deserializer)?;
+    match value {
+        Value::String(s) if s == "null" => Ok(None),
+        Value::Object(orders) => orders
+            .get("orders")
+            .map(|o| serde_json::from_value(o.to_owned()))
+            .transpose()
+            .map_err(serde::de::Error::custom),
+        _ => serde_json::from_value(value)
+            .map(Some)
+            .map_err(serde::de::Error::custom),
     }
 }
 
-#[derive(Debug,Serialize,Deserialize)]
+#[derive(Debug, Serialize, Deserialize)]
+pub enum OneOrMore<T> {
+    Multiple(Vec<T>),
+    One(T),
+}
+
+#[derive(Debug, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
 pub struct OrdersResponse {
     #[serde(deserialize_with = "deserialize_orders")]
     pub orders: Option<Orders>,
 }
 
-// impl OrdersResponse {
-//     fn deserialize_orders<'de, D>(deserializer: D) -> Result<Option<Orders>, D::Error>
-//     where
-//         D: Deserializer<'de>,
-//     {
-//         let s: String = String::deserialize(deserializer)?;
-//         if s == "null" {
-//             Ok(None)
-//         } else {
-//             let orders: Orders = serde_json::from_str(&s).map_err(de::Error::custom)?;
-//             Ok(Some(orders))
-//         }
-//     }
-// }
-
-#[derive(Debug,Serialize,Deserialize)]
+#[derive(Debug, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
 pub struct Orders {
-    pub order: Vec<Order>,
+    pub order: OneOrMore<Order>,
 }
 
-#[derive(Debug,Serialize,Deserialize)]
+#[derive(Debug, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
 pub struct Order {
     pub id: u64,
+    pub tag: Option<String>,
+    #[serde(rename = "type")]
     pub order_type: String,
     pub symbol: String,
     pub side: String,
@@ -57,16 +60,21 @@ pub struct Order {
     pub last_fill_price: f32,
     pub last_fill_quantity: f32,
     pub remaining_quantity: f32,
+    #[serde(with = "custom_datetime")]
     pub create_date: DateTime<Utc>,
+    #[serde(with = "custom_datetime")]
     pub transaction_date: DateTime<Utc>,
     pub class: String,
     pub option_symbol: Option<String>,
+    pub stop_price: Option<f32>,
+    pub reason_description: Option<String>,
     pub strategy: Option<String>,
     pub num_legs: Option<u32>,
     pub leg: Option<Vec<OrderLeg>>,
 }
 
-#[derive(Debug,Serialize,Deserialize)]
+#[derive(Debug, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
 pub struct OrderLeg {
     pub id: u64,
     #[serde(rename = "type")]
@@ -82,23 +90,137 @@ pub struct OrderLeg {
     pub last_fill_price: f32,
     pub last_fill_quantity: f32,
     pub remaining_quantity: f32,
+    #[serde(with = "custom_datetime")]
     pub create_date: DateTime<Utc>,
+    #[serde(with = "custom_datetime")]
     pub transaction_date: DateTime<Utc>,
     pub class: String,
     pub option_symbol: Option<String>,
 }
 
-pub async fn fetch_orders(account_id: &str) -> Result<Option<Vec<Order>>, TradierError> {
-    let response = fetch_orders_json(account_id).await?;
-    let res: OrdersResponse = serde_json::from_value(response)?;
-    Ok(res.orders.map(|orders| orders.order))
+// pub fn to_orders(response: OrdersResponse) -> Option<Vec<Order>> {
+//     match response {
+//         OrdersResponse {
+//             orders: Some(Orders {
+//                 order: OneOrMore::Multiple(orders),
+//             }),
+//         } => Some(orders),
+//         OrdersResponse {
+//             orders: Some(Orders {
+//                 order: OneOrMore::One(order),
+//             }),
+//         } => Some(vec![order]),
+//         OrdersResponse { orders: None } => None,
+//     }
+// }
+
+pub fn value_to_orders(mut json: serde_json::Value) -> Option<Vec<Order>> {
+    let order = json.get_mut("orders")?.get_mut("order")?.take();
+    match order {
+        Value::Array(orders) => Some(
+            orders
+                .into_iter()
+                .map(|o| serde_json::from_value(o).unwrap())
+                .collect(),
+        ),
+        Value::Object(order) => Some(vec![match from_value(Value::Object(order)) {
+            Ok(order) => order,
+            Err(e) => panic!("Error deserializing order: {:?}", e),
+        }]),
+        _ => panic!("Unexpected order value: {:?}", order),
+    }
 }
 
-pub async fn fetch_orders_json(account_id: &str) -> Result<serde_json::Value, TradierError> {
+pub async fn fetch_orders(account_id: &str) -> Result<Option<Vec<Order>>, TradierError> {
     // TODO: pagination?
     let url = format!("/accounts/{}/orders?includeTags=true", account_id);
-    println!("{}", url);
     let response = crate::http::tradier_get(&url).await?;
     let json_value: serde_json::Value = serde_json::from_str(&response)?;
-    Ok(json_value)
+    Ok(value_to_orders(json_value))
+    // // let res: Result<OrdersResponse, serde_json::Error> = serde_json::from_value(response);
+    // match json_value {
+    //     Ok(orders_response) => Ok(value_to_orders(orders_response)),
+    //     Err(e) => {
+    //         eprintln!("Error deserializing orders response: {:?}", e);
+    //         panic!("{:?}", e)
+    //     }
+    // }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_ser() {
+        let obj = test_obj();
+        let json = serde_json::to_string(&obj).unwrap();
+        println!("{}", json);
+    }
+
+    #[test]
+    fn test_deser() {
+        let response = include_str!("../data/response.json");
+        println!("{}", response);
+        let orders_response: OrdersResponse = serde_json::from_str(response).unwrap();
+    }
+
+    // let obj = test_obj();
+    // let json = serde_json::to_string(&obj).unwrap();
+    // let orders_response: OrdersResponse = serde_json::from_str(&json).unwrap();
+    // println!("{:?}", orders_response);
+
+    // load file 'data/response.json' and parse it as OrdersResponse
+
+    fn test_obj() -> OrdersResponse {
+        let order = Order {
+            id: 1,
+            tag: Some("tag".to_string()),
+            order_type: "order_type".to_string(),
+            symbol: "symbol".to_string(),
+            side: "side".to_string(),
+            quantity: 1.0,
+            status: "status".to_string(),
+            duration: "duration".to_string(),
+            price: Some(1.0),
+            avg_fill_price: 1.0,
+            exec_quantity: 1.0,
+            last_fill_price: 1.0,
+            last_fill_quantity: 1.0,
+            remaining_quantity: 1.0,
+            create_date: Utc::now(),
+            transaction_date: Utc::now(),
+            class: "class".to_string(),
+            option_symbol: Some("option_symbol".to_string()),
+            stop_price: Some(1.0),
+            reason_description: Some("reason_description".to_string()),
+            strategy: Some("strategy".to_string()),
+            num_legs: Some(1),
+            leg: Some(vec![OrderLeg {
+                id: 1,
+                order_type: "order_type".to_string(),
+                symbol: "symbol".to_string(),
+                side: "side".to_string(),
+                quantity: 1.0,
+                status: "status".to_string(),
+                duration: "duration".to_string(),
+                price: Some(1.0),
+                avg_fill_price: 1.0,
+                exec_quantity: 1.0,
+                last_fill_price: 1.0,
+                last_fill_quantity: 1.0,
+                remaining_quantity: 1.0,
+                create_date: Utc::now(),
+                transaction_date: Utc::now(),
+                class: "class".to_string(),
+                option_symbol: Some("option_symbol".to_string()),
+            }]),
+        };
+        let orders = Orders {
+            order: OneOrMore::One(order),
+        };
+        OrdersResponse {
+            orders: Some(orders),
+        }
+    }
 }

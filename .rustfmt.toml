@@ -1,0 +1,4 @@
+unstable_features = true
+edition = "2024"
+trailing_comma = "Never"
+tab_spaces = 4
