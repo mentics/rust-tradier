@@ -1,5 +1,5 @@
 use crate::http::tradier_get;
-use crate::types::{QuoteResponse, Underlying};
+use crate::types::{QuoteResponse, TradierQuote};
 use anyhow::Result;
 use serde_json;
 
@@ -27,7 +27,7 @@ use serde_json;
 ///
 /// # Note
 /// This function requires a valid TRADIER_API_KEY environment variable to be set.
-pub async fn get_quote(symbol: &str) -> Result<Underlying> {
+pub async fn get_quote(symbol: &str) -> Result<TradierQuote> {
     // Validate required parameters
     if symbol.is_empty() {
         anyhow::bail!("Symbol is required");
@@ -79,7 +79,7 @@ pub async fn get_quote(symbol: &str) -> Result<Underlying> {
 ///
 /// # Note
 /// This function requires a valid TRADIER_API_KEY environment variable to be set.
-pub async fn get_quotes(symbols: Vec<&str>) -> Result<Vec<Underlying>> {
+pub async fn get_quotes(symbols: Vec<&str>) -> Result<Vec<TradierQuote>> {
     // Validate required parameters
     if symbols.is_empty() {
         anyhow::bail!("At least one symbol is required");

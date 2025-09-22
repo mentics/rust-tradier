@@ -6,10 +6,10 @@ use serde_json;
 use std::collections::HashMap;
 use std::sync::{OnceLock, RwLock};
 
-static EXPIRATIONS_CACHE: OnceLock<RwLock<HashMap<String, Vec<NaiveDate>>>> = OnceLock::new();
+static EXPIRATIONS_CACHE: OnceLock<RwLock<HashMap<String, Vec<String>>>> = OnceLock::new();
 
 /// Get the global expirations cache, initializing it if needed
-fn get_cache() -> &'static RwLock<HashMap<String, Vec<NaiveDate>>> {
+fn get_cache() -> &'static RwLock<HashMap<String, Vec<String>>> {
     EXPIRATIONS_CACHE.get_or_init(|| RwLock::new(HashMap::new()))
 }
 
@@ -49,7 +49,7 @@ fn get_cache() -> &'static RwLock<HashMap<String, Vec<NaiveDate>>> {
 ///
 /// # Note
 /// This function requires a valid TRADIER_API_KEY environment variable to be set.
-pub async fn get_expirations(symbol: &str, refresh: bool) -> Result<Vec<NaiveDate>> {
+pub async fn get_expirations(symbol: &str, refresh: bool) -> Result<Vec<String>> {
     // Validate required parameters
     if symbol.is_empty() {
         anyhow::bail!("Symbol is required");
@@ -102,7 +102,7 @@ pub async fn get_expirations(symbol: &str, refresh: bool) -> Result<Vec<NaiveDat
 ///     Err(e) => eprintln!("Error: {}", e),
 /// }
 /// ```
-pub async fn get_expirations_cached(symbol: &str) -> Result<Vec<NaiveDate>> {
+pub async fn get_expirations_cached(symbol: &str) -> Result<Vec<String>> {
     get_expirations(symbol, false).await
 }
 

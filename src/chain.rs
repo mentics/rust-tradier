@@ -1,5 +1,5 @@
 use crate::http::tradier_get;
-use crate::types::{OptionChainResponse, OptionData, OptionRight};
+use crate::types::{OptionChainResponse, OptionData};
 use anyhow::Result;
 use serde_json;
 use tracing::error;
@@ -71,38 +71,6 @@ pub async fn get_option_chain(
     };
 
     Ok(option_chain)
-}
-
-/// Get calls from an option chain
-///
-/// # Arguments
-/// * `chain` - The option chain response
-///
-/// # Returns
-/// A vector of call options
-pub fn get_calls(chain: &OptionChainResponse) -> Vec<&OptionData> {
-    chain
-        .options
-        .option
-        .iter()
-        .filter(|opt| matches!(opt.right, OptionRight::Call))
-        .collect()
-}
-
-/// Get puts from an option chain
-///
-/// # Arguments
-/// * `chain` - The option chain response
-///
-/// # Returns
-/// A vector of put options
-pub fn get_puts(chain: &OptionChainResponse) -> Vec<&OptionData> {
-    chain
-        .options
-        .option
-        .iter()
-        .filter(|opt| matches!(opt.right, OptionRight::Put))
-        .collect()
 }
 
 /// Get options sorted by strike price
@@ -198,10 +166,7 @@ mod tests {
         let result: OptionChainResponse = serde_json::from_str(json_response).unwrap();
         assert_eq!(result.options.option.len(), 1);
         assert_eq!(result.options.option[0].symbol, "SPY251010C00500000");
-        assert!(matches!(
-            result.options.option[0].right,
-            crate::types::OptionRight::Call
-        ));
+        assert_eq!(result.options.option[0].right, "call");
     }
 
     /// Test to verify normal parsing works with an array of options
@@ -229,9 +194,6 @@ mod tests {
         let result: OptionChainResponse = serde_json::from_str(json_response).unwrap();
         assert_eq!(result.options.option.len(), 1);
         assert_eq!(result.options.option[0].symbol, "SPY251010C00500000");
-        assert!(matches!(
-            result.options.option[0].right,
-            crate::types::OptionRight::Call
-        ));
+        assert_eq!(result.options.option[0].right, "call");
     }
 }

@@ -2,8 +2,6 @@ use chrono::NaiveDate;
 use serde::{Deserialize, Serialize};
 use std::fmt;
 
-use crate::util::{deserialize_naive_dates, serialize_naive_dates};
-
 // Custom deserializer for option field that handles both single object and array cases
 fn deserialize_option_field<'de, D>(deserializer: D) -> Result<Vec<OptionData>, D::Error>
 where
@@ -98,14 +96,6 @@ impl fmt::Display for Interval {
 }
 
 #[derive(Debug, Clone, Deserialize, Serialize)]
-pub enum OptionRight {
-    #[serde(rename = "call", alias = "C")]
-    Call,
-    #[serde(rename = "put", alias = "P")]
-    Put
-}
-
-#[derive(Debug, Clone, Deserialize, Serialize)]
 pub struct OptionData {
     pub symbol: String,
     pub description: String,
@@ -141,7 +131,7 @@ pub struct OptionData {
     pub expiration_date: String,
     pub expiration_type: String,
     #[serde(rename = "option_type")]
-    pub right: OptionRight,
+    pub right: String,
     pub root_symbol: String,
     pub greeks: Option<Greeks>
 }
@@ -162,7 +152,7 @@ pub struct Greeks {
 }
 
 #[derive(Debug, Clone, Deserialize, Serialize)]
-pub struct Underlying {
+pub struct TradierQuote {
     pub symbol: String,
     pub description: String,
     pub exch: String,
@@ -280,7 +270,7 @@ pub struct QuoteResponse {
 }
 
 // Custom deserializer for quote field that handles both single object and array cases
-fn deserialize_quote_field<'de, D>(deserializer: D) -> Result<Vec<Underlying>, D::Error>
+fn deserialize_quote_field<'de, D>(deserializer: D) -> Result<Vec<TradierQuote>, D::Error>
 where
     D: serde::Deserializer<'de>
 {
@@ -290,7 +280,7 @@ where
     struct QuoteFieldVisitor;
 
     impl<'de> Visitor<'de> for QuoteFieldVisitor {
-        type Value = Vec<Underlying>;
+        type Value = Vec<TradierQuote>;
 
         fn expecting(&self, formatter: &mut fmt::Formatter) -> fmt::Result {
             formatter
@@ -342,16 +332,12 @@ where
 #[derive(Debug, Clone, Deserialize, Serialize)]
 pub struct QuoteWrapper {
     #[serde(deserialize_with = "deserialize_quote_field")]
-    pub quote: Vec<Underlying>
+    pub quote: Vec<TradierQuote>
 }
 
 #[derive(Debug, Clone, Deserialize, Serialize)]
 pub struct ExpirationsWrapper {
-    #[serde(
-        serialize_with = "serialize_naive_dates",
-        deserialize_with = "deserialize_naive_dates"
-    )]
-    pub date: Vec<NaiveDate>
+    pub date: Vec<String>
 }
 
 #[derive(Debug, Clone, Deserialize, Serialize)]
@@ -385,32 +371,6 @@ mod tests {
     use super::*;
 
     #[test]
-    fn test_option_right_deserialization() {
-        let call: OptionRight = serde_json::from_str("\"call\"").unwrap();
-        assert!(matches!(call, OptionRight::Call));
-
-        let put: OptionRight = serde_json::from_str("\"put\"").unwrap();
-        assert!(matches!(put, OptionRight::Put));
-
-        let call_upper: OptionRight = serde_json::from_str("\"C\"").unwrap();
-        assert!(matches!(call_upper, OptionRight::Call));
-
-        let put_upper: OptionRight = serde_json::from_str("\"P\"").unwrap();
-        assert!(matches!(put_upper, OptionRight::Put));
-    }
-
-    #[test]
-    fn test_option_right_serialization() {
-        let call = OptionRight::Call;
-        let serialized = serde_json::to_string(&call).unwrap();
-        assert_eq!(serialized, "\"call\"");
-
-        let put = OptionRight::Put;
-        let serialized = serde_json::to_string(&put).unwrap();
-        assert_eq!(serialized, "\"put\"");
-    }
-
-    #[test]
     fn test_option_data_with_option_type_field() {
         let data = r#"{
             "symbol": "AAPL230315C00150000",
@@ -427,7 +387,7 @@ mod tests {
 
         let option: OptionData = serde_json::from_str(data).unwrap();
         assert_eq!(option.symbol, "AAPL230315C00150000");
-        assert!(matches!(option.right, OptionRight::Call));
+        assert_eq!(option.right, "call");
     }
 
     #[test]
@@ -435,26 +395,6 @@ mod tests {
         assert_eq!(format!("{}", Interval::Daily), "daily");
         assert_eq!(format!("{}", Interval::Weekly), "weekly");
         assert_eq!(format!("{}", Interval::Monthly), "monthly");
-    }
-
-    #[test]
-    fn test_expirations_wrapper_serde() {
-        use chrono::NaiveDate;
-
-        let wrapper = ExpirationsWrapper {
-            date: vec![
-                NaiveDate::from_ymd_opt(2023, 12, 25).unwrap(),
-                NaiveDate::from_ymd_opt(2024, 1, 1).unwrap(),
-            ]
-        };
-
-        // Test serialization
-        let serialized = serde_json::to_string(&wrapper).unwrap();
-        assert_eq!(serialized, r#"{"date":["2023-12-25","2024-01-01"]}"#);
-
-        // Test deserialization
-        let deserialized: ExpirationsWrapper = serde_json::from_str(&serialized).unwrap();
-        assert_eq!(deserialized.date, wrapper.date);
     }
 
     #[test]
@@ -571,12 +511,12 @@ mod tests {
 
         // Check the first option (put)
         assert_eq!(result.options.option[0].symbol, "TLT251010P00060000");
-        assert!(matches!(result.options.option[0].right, OptionRight::Put));
+        assert_eq!(result.options.option[0].right, "put");
         assert_eq!(result.options.option[0].strike, 60.0);
 
         // Check the second option (call)
         assert_eq!(result.options.option[1].symbol, "TLT251010C00060000");
-        assert!(matches!(result.options.option[1].right, OptionRight::Call));
+        assert_eq!(result.options.option[1].right, "call");
         assert_eq!(result.options.option[1].strike, 60.0);
     }
 }

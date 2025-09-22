@@ -1,13 +1,11 @@
-use crate::custom_datetime;
 use crate::error::TradierError;
-use chrono::{DateTime, Utc};
 use serde::de::{self, Deserializer};
 use serde::{Deserialize, Serialize};
 use serde_json::{from_value, Value};
 
 fn deserialize_orders<'de, D>(deserializer: D) -> Result<Option<Orders>, D::Error>
 where
-    D: Deserializer<'de>,
+    D: Deserializer<'de>
 {
     let value: Value = Deserialize::deserialize(deserializer)?;
     match value {
@@ -19,27 +17,27 @@ where
             .map_err(serde::de::Error::custom),
         _ => serde_json::from_value(value)
             .map(Some)
-            .map_err(serde::de::Error::custom),
+            .map_err(serde::de::Error::custom)
     }
 }
 
 #[derive(Debug, Serialize, Deserialize)]
 pub enum OneOrMore<T> {
     Multiple(Vec<T>),
-    One(T),
+    One(T)
 }
 
 #[derive(Debug, Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
 pub struct OrdersResponse {
     #[serde(deserialize_with = "deserialize_orders")]
-    pub orders: Option<Orders>,
+    pub orders: Option<Orders>
 }
 
 #[derive(Debug, Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
 pub struct Orders {
-    pub order: OneOrMore<Order>,
+    pub order: OneOrMore<Order>
 }
 
 #[derive(Debug, Serialize, Deserialize)]
@@ -60,17 +58,15 @@ pub struct Order {
     pub last_fill_price: f32,
     pub last_fill_quantity: f32,
     pub remaining_quantity: f32,
-    #[serde(with = "custom_datetime")]
-    pub create_date: DateTime<Utc>,
-    #[serde(with = "custom_datetime")]
-    pub transaction_date: DateTime<Utc>,
+    pub create_date: String,
+    pub transaction_date: String,
     pub class: String,
     pub option_symbol: Option<String>,
     pub stop_price: Option<f32>,
     pub reason_description: Option<String>,
     pub strategy: Option<String>,
     pub num_legs: Option<u32>,
-    pub leg: Option<Vec<OrderLeg>>,
+    pub leg: Option<Vec<OrderLeg>>
 }
 
 #[derive(Debug, Serialize, Deserialize)]
@@ -90,12 +86,10 @@ pub struct OrderLeg {
     pub last_fill_price: f32,
     pub last_fill_quantity: f32,
     pub remaining_quantity: f32,
-    #[serde(with = "custom_datetime")]
-    pub create_date: DateTime<Utc>,
-    #[serde(with = "custom_datetime")]
-    pub transaction_date: DateTime<Utc>,
+    pub create_date: String,
+    pub transaction_date: String,
     pub class: String,
-    pub option_symbol: Option<String>,
+    pub option_symbol: Option<String>
 }
 
 // pub fn to_orders(response: OrdersResponse) -> Option<Vec<Order>> {
@@ -121,13 +115,13 @@ pub fn value_to_orders(mut json: serde_json::Value) -> Option<Vec<Order>> {
             orders
                 .into_iter()
                 .map(|o| serde_json::from_value(o).unwrap())
-                .collect(),
+                .collect()
         ),
         Value::Object(order) => Some(vec![match from_value(Value::Object(order)) {
             Ok(order) => order,
-            Err(e) => panic!("Error deserializing order: {:?}", e),
+            Err(e) => panic!("Error deserializing order: {:?}", e)
         }]),
-        _ => panic!("Unexpected order value: {:?}", order),
+        _ => panic!("Unexpected order value: {:?}", order)
     }
 }
 
@@ -188,8 +182,8 @@ mod tests {
             last_fill_price: 1.0,
             last_fill_quantity: 1.0,
             remaining_quantity: 1.0,
-            create_date: Utc::now(),
-            transaction_date: Utc::now(),
+            create_date: "2023-01-01T00:00:00Z".to_string(),
+            transaction_date: "2023-01-01T00:00:00Z".to_string(),
             class: "class".to_string(),
             option_symbol: Some("option_symbol".to_string()),
             stop_price: Some(1.0),
@@ -210,17 +204,17 @@ mod tests {
                 last_fill_price: 1.0,
                 last_fill_quantity: 1.0,
                 remaining_quantity: 1.0,
-                create_date: Utc::now(),
-                transaction_date: Utc::now(),
+                create_date: "2023-01-01T00:00:00Z".to_string(),
+                transaction_date: "2023-01-01T00:00:00Z".to_string(),
                 class: "class".to_string(),
-                option_symbol: Some("option_symbol".to_string()),
-            }]),
+                option_symbol: Some("option_symbol".to_string())
+            }])
         };
         let orders = Orders {
-            order: OneOrMore::One(order),
+            order: OneOrMore::One(order)
         };
         OrdersResponse {
-            orders: Some(orders),
+            orders: Some(orders)
         }
     }
 }
