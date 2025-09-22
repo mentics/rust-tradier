@@ -16,3 +16,4 @@ cached = { version = "0.51.0", features = ["async"] }
 # tokio-tungstenite = { version = "0.21.0", features = ["rustls-tls-native-roots"] }
 tokio-tungstenite = { version = "0.21.0", features = ["rustls-tls-webpki-roots"] }
 tracing = "0.1"
+shared = { path = "../../perig/main/shared" }

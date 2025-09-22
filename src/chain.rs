@@ -1,44 +1,26 @@
 use crate::http::tradier_get;
 use crate::types::{OptionChainResponse, OptionData};
 use anyhow::Result;
+use cached::proc_macro::cached;
+use chrono::Utc;
 use serde_json;
+use shared::env::data_dir;
+use shared::temporal::is_us_market_open_now;
+use std::fs;
 use tracing::error;
 
-/// Get an option chain for the specified parameters
-///
-/// # Arguments
-/// * `symbol` - The underlying symbol (e.g., "SPY", "AAPL")
-/// * `expiration` - Expiration date in YYYY-MM-DD format
-/// * `greeks` - Whether to include Greeks data
-///
-/// # Returns
-/// A result containing the option chain response or an error
-///
-/// # Example
-/// ```rust
-/// use rust_tradier::chain::get_option_chain;
-///
-/// match get_option_chain("SPY", "2024-12-20", true, None).await {
-///     Ok(response) => {
-///         println!("Found {} options", response.options.option.len());
-///     }
-///     Err(e) => eprintln!("Error: {}", e),
-/// }
-/// ```
-pub async fn get_option_chain(
+/// Get an option chain for the specified parameters (cached for 30 seconds)
+#[cached(
+    time = 30,
+    result = true,
+    key = "String",
+    convert = r#"{ format!("{}-{}-{}", symbol, expiration, greeks) }"#
+)]
+async fn get_option_chain_cached(
     symbol: &str,
     expiration: &str,
     greeks: bool
 ) -> Result<OptionChainResponse> {
-    // Validate required parameters
-    if symbol.is_empty() {
-        anyhow::bail!("Symbol is required");
-    }
-
-    if expiration.is_empty() {
-        anyhow::bail!("Expiration is required");
-    }
-
     // Validate required parameters
     if symbol.is_empty() {
         anyhow::bail!("Symbol is required");
@@ -70,7 +52,66 @@ pub async fn get_option_chain(
         }
     };
 
+    // Write JSON response to file if market is open
+    if is_us_market_open_now() {
+        let timestamp = Utc::now().timestamp_millis();
+        let file_path = data_dir()
+            .join("samples")
+            .join("chains")
+            .join(symbol)
+            .join(expiration)
+            .join(format!("{}.json", timestamp));
+
+        // Create directories if they don't exist
+        if let Some(parent_dir) = file_path.parent() {
+            if let Err(e) = fs::create_dir_all(parent_dir) {
+                error!(
+                    "Failed to create directories for option chain sample: {}",
+                    e
+                );
+            } else {
+                // Write the JSON response to file
+                if let Err(e) = fs::write(&file_path, &response_text) {
+                    error!(
+                        "Failed to write option chain sample to {}: {}",
+                        file_path.display(),
+                        e
+                    );
+                }
+            }
+        }
+    }
+
     Ok(option_chain)
+}
+
+/// Get an option chain for the specified parameters
+///
+/// # Arguments
+/// * `symbol` - The underlying symbol (e.g., "SPY", "AAPL")
+/// * `expiration` - Expiration date in YYYY-MM-DD format
+/// * `greeks` - Whether to include Greeks data
+///
+/// # Returns
+/// A result containing the option chain response or an error
+///
+/// # Example
+/// ```rust
+/// use rust_tradier::chain::get_option_chain;
+///
+/// match get_option_chain("SPY", "2024-12-20", true, None).await {
+///     Ok(response) => {
+///         println!("Found {} options", response.options.option.len());
+///     }
+///     Err(e) => eprintln!("Error: {}", e),
+/// }
+/// ```
+pub async fn get_option_chain(
+    symbol: &str,
+    expiration: &str,
+    greeks: bool
+) -> Result<OptionChainResponse> {
+    get_option_chain_cached(symbol, expiration, greeks).await
 }
 
 /// Get options sorted by strike price

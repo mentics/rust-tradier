@@ -35,9 +35,7 @@ pub use history::get_history;
 pub use fundamental::get_dividends;
 
 // Re-export expirations functions
-pub use expirations::{
-    clear_expirations_cache, get_expirations, get_expirations_cache_size, get_expirations_cached
-};
+pub use expirations::get_expirations;
 
 // Re-export subscription manager
 pub use subscription_manager::{LiveDataSubscriptionManager, MarketData, PrintHandler};
