@@ -366,6 +366,21 @@ pub struct HistoryResponse {
     pub history: HistoryWrapper
 }
 
+#[derive(Debug, Clone, Deserialize, Serialize)]
+pub struct MarketClock {
+    pub date: String,
+    pub description: String,
+    pub next_change: String,
+    pub next_state: String,
+    pub state: String,
+    pub timestamp: i64
+}
+
+#[derive(Debug, Clone, Deserialize, Serialize)]
+pub struct ClockResponse {
+    pub clock: MarketClock
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;

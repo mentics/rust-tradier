@@ -1,13 +1,63 @@
 use crate::http::tradier_get;
-use crate::types::{OptionChainResponse, OptionData};
+use crate::types::{ClockResponse, OptionChainResponse, OptionData};
 use anyhow::Result;
 use cached::proc_macro::cached;
-use chrono::Utc;
+use chrono::{DateTime, Duration, Utc};
 use serde_json;
-use shared::env::data_dir;
-use shared::temporal::is_us_market_open_now;
 use std::fs;
+use std::path::PathBuf;
+use std::sync::OnceLock;
 use tracing::error;
+
+/// Get the data directory path
+fn data_dir() -> &'static PathBuf {
+    static DATA_DIR: OnceLock<PathBuf> = OnceLock::new();
+    DATA_DIR.get_or_init(|| {
+        std::env::var("DATA_DIR")
+            .map(PathBuf::from)
+            .unwrap_or_else(|_| PathBuf::from("/tmp/tradier-data"))
+    })
+}
+
+/// Check if the US market is currently open and will remain open for at least 1 minute
+async fn is_us_market_open_and_stable() -> Result<bool> {
+    // Call Tradier API /v1/markets/clock
+    let uri = "/markets/clock";
+    let response_text = tradier_get(uri).await?;
+
+    // Parse the JSON response
+    let clock_response: ClockResponse = match serde_json::from_str(&response_text) {
+        Ok(response) => response,
+        Err(e) => {
+            error!("Failed to parse clock response: {}", e);
+            error!("Response text: {}", response_text);
+            return Ok(false); // Default to false on parse error
+        }
+    };
+
+    // Check if market is open
+    if clock_response.clock.state != "open" {
+        return Ok(false);
+    }
+
+    // Parse next_change timestamp
+    let next_change = match DateTime::parse_from_rfc3339(&clock_response.clock.next_change) {
+        Ok(dt) => dt.with_timezone(&Utc),
+        Err(e) => {
+            error!(
+                "Failed to parse next_change timestamp '{}': {}",
+                clock_response.clock.next_change, e
+            );
+            return Ok(false);
+        }
+    };
+
+    // Check if next_change is at least 1 minute in the future
+    let now = Utc::now();
+    let one_minute_from_now = now + Duration::minutes(1);
+
+    Ok(next_change >= one_minute_from_now)
+}
 
 /// Get an option chain for the specified parameters (cached for 30 seconds)
 #[cached(
@@ -52,8 +102,8 @@ async fn get_option_chain_cached(
         }
     };
 
-    // Write JSON response to file if market is open
-    if is_us_market_open_now() {
+    // Write JSON response to file if market is open and stable
+    if is_us_market_open_and_stable().await? {
         let timestamp = Utc::now().timestamp_millis();
         let file_path = data_dir()
             .join("samples")

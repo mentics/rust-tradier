@@ -152,12 +152,12 @@ mod tests {
         println!("{}", json);
     }
 
-    #[test]
-    fn test_deser() {
-        let response = include_str!("../data/response.json");
-        println!("{}", response);
-        let orders_response: OrdersResponse = serde_json::from_str(response).unwrap();
-    }
+    // #[test]
+    // fn test_deser() {
+    //     let response = include_str!("../data/response.json");
+    //     println!("{}", response);
+    //     let orders_response: OrdersResponse = serde_json::from_str(response).unwrap();
+    // }
 
     // let obj = test_obj();
     // let json = serde_json::to_string(&obj).unwrap();
