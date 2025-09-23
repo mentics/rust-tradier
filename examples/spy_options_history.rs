@@ -1,5 +1,5 @@
 use rust_tradier::{chain::get_option_chain, history::get_history, types::Interval};
-use serde::{Deserialize, Serialize};
+use serde::Serialize;
 use std::error::Error;
 
 #[derive(Debug, Serialize)]

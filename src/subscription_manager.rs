@@ -77,6 +77,15 @@ pub struct LiveDataSubscriptionManager<T> {
     cancellation_token: CancellationToken
 }
 
+impl<T> Default for LiveDataSubscriptionManager<T>
+where
+    T: Send + Sync + Clone + From<String> + 'static
+{
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 impl<T> LiveDataSubscriptionManager<T>
 where
     T: Send + Sync + Clone + From<String> + 'static
@@ -492,11 +501,10 @@ where
     fn extract_symbol_from_message(json_value: &Value) -> Option<String> {
         // This is a placeholder - you'd need to implement the actual parsing
         // based on Tradier's websocket message format
-        if let Some(symbol) = json_value.get("symbol").and_then(|s| s.as_str()) {
-            Some(symbol.to_string())
-        } else {
-            None
-        }
+        json_value
+            .get("symbol")
+            .and_then(|s| s.as_str())
+            .map(|symbol| symbol.to_string())
     }
 
     /// Connect to Tradier websocket
@@ -548,7 +556,7 @@ mod tests {
         let manager = LiveDataSubscriptionManager::<String>::new();
 
         // Create a channel for receiving data
-        let (data_tx, mut data_rx) = mpsc::channel(100);
+        let (data_tx, _data_rx) = mpsc::channel(100);
 
         // Subscribe to some symbols
         manager

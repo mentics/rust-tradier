@@ -1,5 +1,5 @@
 use crate::error::TradierError;
-use serde::de::{self, Deserializer};
+use serde::de::Deserializer;
 use serde::{Deserialize, Serialize};
 use serde_json::{from_value, Value};
 

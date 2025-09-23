@@ -1,4 +1,3 @@
-use chrono::NaiveDate;
 use serde::{Deserialize, Serialize};
 use std::fmt;
 
@@ -189,7 +188,7 @@ fn deserialize_root_symbols<'de, D>(deserializer: D) -> Result<Option<Vec<String
 where
     D: serde::Deserializer<'de>
 {
-    use serde::de::{self, Deserialize, Visitor};
+    use serde::de::{self, Visitor};
     use std::fmt;
 
     struct RootSymbolsVisitor;

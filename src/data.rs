@@ -1,13 +1,14 @@
+#![allow(unused)]
+use crate::http::tradier_post;
 use chrono::{NaiveDateTime, Utc};
+use futures_util::{SinkExt, StreamExt};
+use serde_json::{json, Value};
 use std::time::Duration;
-use futures_util::{StreamExt, SinkExt};
-use serde_json::{Value,json};
 use tokio::time::timeout;
 use tokio_tungstenite::{connect_async, tungstenite::protocol::Message, WebSocketStream};
-use crate::http::tradier_post;
 
 pub trait Handler<T> {
-    fn on_data(&mut self, timestamp:NaiveDateTime, data:T);
+    fn on_data(&mut self, timestamp: NaiveDateTime, data: T);
 }
 
 // pub fn start<H:Handler<String> + 'static + Send + Sync>(mut handler:H, symbols:&str) {
@@ -32,7 +33,10 @@ pub trait Handler<T> {
 // }
 
 /// symbols is comma separated string of symbols to subscribe
-pub async fn run_async<H:Handler<String> + 'static + Send + Sync>(mut handler:H, symbols:&[&str]) {
+pub async fn run_async<H: Handler<String> + 'static + Send + Sync>(
+    mut handler: H,
+    symbols: &[&str]
+) {
     println!("Setting up listening on websocket client");
     // let rt = Builder::new_current_thread().enable_io().enable_time().build().unwrap(); // new_multi_thread().worker_threads(4).enable_all().build().unwrap();
     // tokio::runtime::Runtime::new().unwrap();
@@ -42,7 +46,10 @@ pub async fn run_async<H:Handler<String> + 'static + Send + Sync>(mut handler:H,
 }
 
 /// Returns true if the caller should attempt to reconnect, or false if the caller should exit.
-async fn run<H:Handler<String> + 'static + Send + Sync>(handler:&mut H, symbols:&[&str]) -> bool {
+async fn run<H: Handler<String> + 'static + Send + Sync>(
+    handler: &mut H,
+    symbols: &[&str]
+) -> bool {
     println!("In websocket thread");
     // TODO: if stream breaks, try to fix it
     let (sid, ws_stream) = connect().await;
@@ -55,12 +62,16 @@ async fn run<H:Handler<String> + 'static + Send + Sync>(handler:&mut H, symbols:
         Err(err) => {
             println!("Error when submitting subscription: {:?}", err);
             return false;
-        },
+        }
     }
     loop {
         match timeout(Duration::from_secs(100), read.next()).await {
             Err(elapsed) => {
-                println!("{}: Websocket read timed out |{}|. Sending ping.", Utc::now().naive_utc(), elapsed);
+                println!(
+                    "{}: Websocket read timed out |{}|. Sending ping.",
+                    Utc::now().naive_utc(),
+                    elapsed
+                );
                 match write.send(Message::Ping(Vec::new())).await {
                     Ok(_) => continue,
                     Err(e) => {
@@ -68,12 +79,12 @@ async fn run<H:Handler<String> + 'static + Send + Sync>(handler:&mut H, symbols:
                         return false;
                     }
                 }
-            },
+            }
 
             Ok(None) => {
                 println!("Exiting: Websocket read.next returned None.");
                 return false;
-            },
+            }
 
             Ok(Some(msg)) => {
                 // if let Some(msg) = timeout(Duration::from_secs(100), read.next()).await {
@@ -100,7 +111,7 @@ async fn run<H:Handler<String> + 'static + Send + Sync>(handler:&mut H, symbols:
                     Err(e) => {
                         println!("Error at {:?}: {:?}", now, e);
                         break;
-                    },
+                    }
                     _ => {
                         println!("Other at {:?}: {:?}", now, msg);
                         break;
@@ -112,7 +123,10 @@ async fn run<H:Handler<String> + 'static + Send + Sync>(handler:&mut H, symbols:
     true
 }
 
-async fn connect() -> (String, WebSocketStream<tokio_tungstenite::MaybeTlsStream<tokio::net::TcpStream>>) {
+async fn connect() -> (
+    String,
+    WebSocketStream<tokio_tungstenite::MaybeTlsStream<tokio::net::TcpStream>>
+) {
     let resp = tradier_post("/markets/events/session", None).await.unwrap();
     println!("{}", resp);
     let data = serde_json::from_str::<Value>(&resp).unwrap();
@@ -134,41 +148,13 @@ mod tests {
     use super::*;
     use std::arch::asm;
 
-    struct Test {
-        data:String
-    }
-
-    impl Handler<String> for Test {
-        fn on_data(&mut self, timestamp:NaiveDateTime, data:String) {
-            // let ago1 = timestamp.elapsed();
-            // let ago2 = timestamp.elapsed();
-            // let t1 = core::arch::x86::_rdtsc();
-            // let t2 = core::arch::x86::_rdtsc();
-            // unsafe {
-            //     let t1 = core::arch::x86_64::_rdtsc();
-            //     let t2 = core::arch::x86_64::_rdtsc();
-            //     println!("{}", t2 - t1);
-            // }
-            // println!("Handler::on_data called, msg received {:?} ago, 2: {:?}, with {:?}", ago1, ago2, data);
-            self.data = data;
-        }
-    }
-
-    // #[test]
-    // fn test_websocket() {
-    //     let h = Test { data: "none yet".to_string() };
-    //     start(h, "SPY");
-    //     std::thread::sleep(std::time::Duration::from_secs(4));
-    //     println!("Test websocket ending");
-    // }
-
     #[tokio::test]
     async fn test_run_async() {
         // let h = Test { data: "none yet".to_string() };
         // run_sync(h);
         struct HH(u16);
         impl Handler<String> for HH {
-            fn on_data(&mut self, timestamp:NaiveDateTime, data:String) {
+            fn on_data(&mut self, _timestamp: NaiveDateTime, data: String) {
                 println!("Handler::on_data called, msg received {:?}", data);
                 self.0 += 1;
                 if self.0 > 2 {
@@ -192,6 +178,7 @@ mod tests {
     }
 
     #[test]
+
     fn test_timing_asm_separate() {
         unsafe {
             let mut t1low: u32 = 0;
@@ -225,7 +212,12 @@ mod tests {
             let t1 = (t1high as u64) << 32 | t1low as u64;
             let t2 = (t2high as u64) << 32 | t2low as u64;
             let t3 = (t3high as u64) << 32 | t3low as u64;
-            println!("Asm separate elapsed 1-2: {}, elapsed 2-3: {}, elapsed 1-3: {},", (t2 - t1), (t3 - t2), (t3 - t1));
+            println!(
+                "Asm separate elapsed 1-2: {}, elapsed 2-3: {}, elapsed 1-3: {},",
+                (t2 - t1),
+                (t3 - t2),
+                (t3 - t1)
+            );
         }
     }
 
