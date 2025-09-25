@@ -8,6 +8,7 @@ pub mod expirations;
 pub mod fundamental;
 pub mod history;
 pub mod http;
+pub mod options;
 pub mod quotes;
 pub mod subscription_manager;
 pub mod types;
@@ -39,3 +40,6 @@ pub use expirations::get_expirations;
 
 // Re-export subscription manager
 pub use subscription_manager::{LiveDataSubscriptionManager, MarketData, PrintHandler};
+
+// Re-export options utilities
+pub use options::{parse_occ_option_symbol, OptionSpec};

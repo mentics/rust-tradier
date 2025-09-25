@@ -2,7 +2,7 @@ use crate::http::tradier_get;
 use crate::types::{ClockResponse, OptionChainResponse, OptionData};
 use anyhow::Result;
 use cached::proc_macro::cached;
-use chrono::{DateTime, Duration, Utc};
+use chrono::{Duration, Utc};
 use serde_json;
 use std::fs;
 use std::path::PathBuf;
@@ -41,12 +41,35 @@ async fn is_us_market_open_and_stable() -> Result<bool> {
     }
 
     // Parse next_change timestamp
-    let next_change = match DateTime::parse_from_rfc3339(&clock_response.clock.next_change) {
-        Ok(dt) => dt.with_timezone(&Utc),
+    // next_change is in "HH:MM" format (local US/Eastern time)
+    use chrono::{Datelike, NaiveTime, TimeZone, Timelike};
+    use chrono_tz::US::Eastern;
+    let next_change = match NaiveTime::parse_from_str(&clock_response.clock.next_change, "%H:%M") {
+        Ok(time) => {
+            // Use today's date in US/Eastern, then convert to UTC
+            let eastern = Eastern;
+            let now_eastern = Utc::now().with_timezone(&eastern);
+            let mut next_change_eastern = eastern
+                .with_ymd_and_hms(
+                    now_eastern.year(),
+                    now_eastern.month(),
+                    now_eastern.day(),
+                    time.hour(),
+                    time.minute(),
+                    0
+                )
+                .unwrap();
+            // If next_change is not in the future, add a day
+            if next_change_eastern <= now_eastern {
+                next_change_eastern = next_change_eastern + chrono::Duration::days(1);
+            }
+            next_change_eastern.with_timezone(&Utc)
+        }
         Err(e) => {
             error!(
-                "Failed to parse next_change timestamp '{}': {}",
-                clock_response.clock.next_change, e
+                clock_response.clock.next_change,
+                ?e,
+                "Failed to parse next_change timestamp (expected HH:MM)",
             );
             return Ok(false);
         }
@@ -96,7 +119,13 @@ async fn get_option_chain_cached(
     let option_chain = match serde_json::from_str(&response_text) {
         Ok(option_chain) => option_chain,
         Err(e) => {
-            error!("Failed to parse option chain response: {}", e);
+            error!(
+                symbol,
+                expiration,
+                greeks,
+                ?e,
+                "Failed to parse option chain response"
+            );
             error!("Response text: {}", response_text);
             anyhow::bail!("Failed to parse option chain response");
         }
