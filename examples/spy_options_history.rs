@@ -123,11 +123,11 @@ async fn main() -> Result<(), Box<dyn Error>> {
             details.greeks.as_ref().and_then(|g| g.delta).unwrap_or(0.0)
         );
         println!("Open interest: {}", details.open_interest.unwrap_or(0));
-        println!("Volume: {}", details.volume.unwrap_or(0));
+        println!("Volume: {}", details.volume.unwrap_or(0.0));
     }
 
     if !historical_option_data.historical_data.is_empty() {
-        let total_volume: u64 = historical_option_data
+        let total_volume: f64 = historical_option_data
             .historical_data
             .iter()
             .filter_map(|point| point.volume)
@@ -141,7 +141,7 @@ async fn main() -> Result<(), Box<dyn Error>> {
                 "First data point: {} - Close: ${:.2}, Volume: {}",
                 first_point.date,
                 first_point.close.unwrap_or(0.0),
-                first_point.volume.unwrap_or(0)
+                first_point.volume.unwrap_or(0.0)
             );
         }
 
@@ -150,7 +150,7 @@ async fn main() -> Result<(), Box<dyn Error>> {
                 "Last data point: {} - Close: ${:.2}, Volume: {}",
                 last_point.date,
                 last_point.close.unwrap_or(0.0),
-                last_point.volume.unwrap_or(0)
+                last_point.volume.unwrap_or(0.0)
             );
         }
 
