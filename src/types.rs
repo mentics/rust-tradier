@@ -103,7 +103,7 @@ pub struct OptionData {
     pub asset_type: String,
     pub last: Option<f64>,
     pub change: Option<f64>,
-    pub volume: Option<u64>,
+    pub volume: Option<f64>,
     pub open: Option<f64>,
     pub high: Option<f64>,
     pub low: Option<f64>,
@@ -113,7 +113,7 @@ pub struct OptionData {
     pub underlying: String,
     pub strike: f64,
     pub change_percentage: Option<f64>,
-    pub average_volume: Option<u64>,
+    pub average_volume: Option<f64>,
     pub last_volume: Option<u64>,
     pub trade_date: Option<u64>,
     pub prevclose: Option<f64>,
@@ -159,7 +159,7 @@ pub struct TradierQuote {
     pub asset_type: String,
     pub last: Option<f64>,
     pub change: Option<f64>,
-    pub volume: Option<u64>,
+    pub volume: Option<f64>,
     pub open: Option<f64>,
     pub high: Option<f64>,
     pub low: Option<f64>,
@@ -351,7 +351,7 @@ pub struct HistoricalDataPoint {
     pub high: Option<f64>,
     pub low: Option<f64>,
     pub close: Option<f64>,
-    pub volume: Option<u64>,
+    pub volume: Option<f64>,
     pub adj_close: Option<f64>
 }
 

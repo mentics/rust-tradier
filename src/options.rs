@@ -1,4 +1,5 @@
 use chrono::NaiveDate;
+use market_types::option::OptionRight;
 use serde::{Deserialize, Serialize};
 
 /// Parsed OCC option specification
@@ -8,13 +9,6 @@ pub struct OptionSpec {
     pub expiration: NaiveDate,
     pub strike: f64,
     pub right: OptionRight
-}
-
-/// Option right (Call or Put)
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
-pub enum OptionRight {
-    Call,
-    Put
 }
 
 /// Parse an OCC (Options Clearing Corporation) option symbol
